@@ -30,8 +30,8 @@ from playwright.sync_api import sync_playwright
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-PASTE_WAIT_MS = 2_000   # time to let ProseMirror process the paste event
-AUTOSAVE_WAIT  = 5_000  # ms to wait for Substack's auto-save URL change
+PASTE_WAIT_MS  = 2_000   # time to let TipTap process the paste event
+AUTOSAVE_WAIT  = 20_000  # ms to wait for Substack's auto-save URL change
 
 
 def md_to_html(text: str) -> str:
@@ -132,6 +132,15 @@ def run(publication: str, session: str, title: str, body_html: str, publish: boo
         paste_body(page, body_html)
 
         page.wait_for_timeout(PASTE_WAIT_MS)
+
+        # Fire a real keystroke so TipTap marks the document dirty and queues auto-save.
+        # (ClipboardEvent alone doesn't trigger TipTap's change detection.)
+        page.keyboard.press("End")
+        page.wait_for_timeout(300)
+
+        # Click the title to blur the body editor — auto-save fires on blur.
+        page.locator("textarea#post-title").click()
+        page.wait_for_timeout(500)
 
         if publish:
             print("  Publishing...")
