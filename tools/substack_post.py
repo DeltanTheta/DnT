@@ -53,37 +53,17 @@ def extract_title(text: str) -> tuple[str, str]:
 
 
 def fill_title(page, title: str) -> None:
-    """Click and type into the Substack title field (contenteditable h1)."""
-    selectors = [
-        'h1[data-testid="post-title"]',
-        'div[data-testid="post-title"]',
-        'h1[placeholder="Title"]',
-        'h1.post-title',
-    ]
-    el = None
-    for sel in selectors:
-        try:
-            el = page.wait_for_selector(sel, timeout=3_000)
-            if el:
-                break
-        except PlaywrightTimeout:
-            continue
-
-    if el is None:
-        # Last resort: first empty contenteditable on the page
-        el = page.locator('[contenteditable="true"]').first
-
+    """Fill the Substack title textarea."""
+    el = page.wait_for_selector('textarea#post-title', timeout=10_000)
     el.click()
-    page.keyboard.press("Control+A")
-    page.keyboard.type(title)
+    el.fill(title)
 
 
 def paste_body(page, body_html: str) -> None:
     """Paste HTML into the ProseMirror body editor via a ClipboardEvent."""
     result = page.evaluate(
         """(html) => {
-            const editor = document.querySelector('.ProseMirror')
-                        || Array.from(document.querySelectorAll('[contenteditable="true"]')).slice(-1)[0];
+            const editor = document.querySelector('.tiptap.ProseMirror');
             if (!editor) return 'editor-not-found';
             editor.focus();
             const dt = new DataTransfer();
