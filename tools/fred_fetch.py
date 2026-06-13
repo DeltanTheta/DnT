@@ -39,10 +39,18 @@ KNOWN_SERIES = {
     "CPIAUCSL": "CPI All Items (SA)",
     "CPILFESL": "Core CPI (ex Food & Energy, SA)",
     "PCEPI": "PCE Price Index",
-    "PCEPILFE": "Core PCE Price Index",
-    # Growth
-    "GDP": "Gross Domestic Product",
+    "PCEPILFE": "Core PCE Price Index (Fed Target)",
+    "PPIACO": "PPI All Commodities",
+    "T5YIE": "5-Year Breakeven Inflation Rate",
+    "T10YIE": "10-Year Breakeven Inflation Rate",
+    # Growth / GDP
+    "GDP": "Nominal GDP",
     "GDPC1": "Real GDP (Chained 2017 Dollars)",
+    "A191RL1Q225SBEA": "Real GDP Growth Rate (QoQ Annualized)",
+    "PCE": "Personal Consumption Expenditures",
+    "GPDI": "Gross Private Domestic Investment",
+    "GCE": "Government Consumption Expenditures",
+    "NETEXP": "Net Exports of Goods and Services",
     "INDPRO": "Industrial Production Index",
     # Labor
     "UNRATE": "Unemployment Rate",
@@ -64,6 +72,12 @@ KNOWN_SERIES = {
     # Commodities
     "DCOILWTICO": "WTI Crude Oil Price",
     "GOLDAMGBD228NLBM": "Gold Price (London Fix, AM)",
+    # Volatility indices (CBOE)
+    "VIXCLS":  "CBOE VIX — S&P 500 Implied Vol",
+    "VXNCLS":  "CBOE VXN — NASDAQ-100 Implied Vol",
+    "GVZCLS":  "CBOE GVZ — Gold Implied Vol",
+    "VXOCLS":  "CBOE OVX — Crude Oil ETF Implied Vol (discontinued Sept 2021)",
+    "VXTYN":   "CBOE TYVIX — 10-Year Treasury Implied Vol (discontinued ~2016)",
 }
 
 

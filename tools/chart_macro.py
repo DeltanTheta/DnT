@@ -56,6 +56,20 @@ def load_csv(path: str) -> pd.DataFrame:
     return df
 
 
+def apply_yoy(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Convert index-level columns to year-over-year % change (12-period for monthly, 4 for quarterly)."""
+    df = df.copy()
+    for col in cols:
+        if col not in df.columns:
+            continue
+        # Detect frequency: if fewer than 20 non-null obs per year on average → quarterly
+        n = df[col].dropna().shape[0]
+        years = max((df.index[-1] - df.index[0]).days / 365.25, 1)
+        periods = 4 if (n / years) < 7 else 12
+        df[col] = df[col].pct_change(periods) * 100
+    return df
+
+
 def fetch_recessions(start: str, end: str) -> list[tuple]:
     """Return list of (start, end) datetime pairs for NBER recessions from FRED."""
     try:
@@ -188,6 +202,10 @@ def main() -> None:
     parser.add_argument("--right", nargs="+", default=[], help="Columns for right y-axis")
     parser.add_argument("--fill-zero", dest="fill_zero", default=None,
                         help="Column to fill above/below zero (spread visualization)")
+    parser.add_argument("--yoy", nargs="+", default=[],
+                        help="Columns to convert to YoY %% change before plotting (12-month or 4-quarter)")
+    parser.add_argument("--rename", nargs="+", default=[],
+                        help="Rename columns before plotting: OLD:NEW pairs e.g. CPIAUCSL:CPI GDPC1:RealGDP")
     parser.add_argument("--recessions", action="store_true",
                         help="Shade NBER recession periods (fetches USREC from FRED)")
     parser.add_argument("--title", default="Macro Chart", help="Chart title")
@@ -201,6 +219,15 @@ def main() -> None:
         sys.exit("ERROR: specify at least one column with --left or --right")
 
     df = load_csv(args.csv)
+    if args.yoy:
+        df = apply_yoy(df, args.yoy)
+    if args.rename:
+        rmap = dict(pair.split(":") for pair in args.rename if ":" in pair)
+        df = df.rename(columns=rmap)
+        args.left  = [rmap.get(c, c) for c in args.left]
+        args.right = [rmap.get(c, c) for c in args.right]
+        if args.fill_zero:
+            args.fill_zero = rmap.get(args.fill_zero, args.fill_zero)
     if args.start:
         df = df[df.index >= args.start]
 
