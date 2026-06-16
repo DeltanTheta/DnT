@@ -20,12 +20,10 @@ Optional .env vars (have sensible defaults):
     MEDIUM_SUBSTACK_URL — your Substack URL (default: https://deltantheta.substack.com)
     MEDIUM_GITHUB_URL   — your GitHub repo URL (default: https://github.com/DeltanTheta/DnT)
 
-Optional .env vars (images):
-    IMGUR_CLIENT_ID     — free key from api.imgur.com/oauth2/addclient (app type: anonymous)
-                          When set, local images are uploaded to Imgur and referenced by URL.
-                          Without it, data URIs are used (Medium strips them — images won't show).
-
 Notes:
+    - Images are copied to assets/, committed, and pushed to GitHub before posting.
+      Medium then references them via raw.githubusercontent.com URLs, which it renders correctly.
+      Requires MEDIUM_GITHUB_URL to be set (or uses the default DeltanTheta/DnT repo).
     - Medium enforces ~2 published stories per day
     - BMC embeds are not supported on Medium; a plain link is used instead
     - AI-assisted disclosure: set manually on Medium after drafting if desired
@@ -42,17 +40,14 @@ import argparse
 import base64
 import os
 import re
+import subprocess
 import sys
-import urllib3
 from pathlib import Path
 
 import markdown
-import requests
 from dotenv import load_dotenv
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -61,6 +56,11 @@ AUTOSAVE_WAIT_MS = 4_000
 
 MEDIUM_SUBSTACK_URL = os.getenv("MEDIUM_SUBSTACK_URL", "https://deltantheta.substack.com")
 MEDIUM_GITHUB_URL = os.getenv("MEDIUM_GITHUB_URL", "https://github.com/DeltanTheta/DnT")
+
+_gh_parts = MEDIUM_GITHUB_URL.rstrip("/").split("/")
+GITHUB_REPO = "/".join(_gh_parts[-2:])   # e.g. "DeltanTheta/DnT"
+GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
+ASSETS_DIR = Path(__file__).parent.parent / "assets"
 
 # Medium editor selectors — update via DOM inspection if these fail (see workflow edge cases)
 TITLE_SELECTOR = 'h1[data-testid="title"], h1[contenteditable="true"], div[data-testid="editorTitle"] h1'
@@ -102,48 +102,64 @@ def extract_title(text: str) -> tuple[str, str]:
     return "Untitled", text
 
 
-def upload_to_imgur(img_path: Path, client_id: str) -> str | None:
-    """Upload a local image to Imgur anonymously. Returns the public URL or None on failure."""
-    try:
-        with open(img_path, "rb") as f:
-            resp = requests.post(
-                "https://api.imgur.com/3/image",
-                headers={"Authorization": f"Client-ID {client_id}"},
-                files={"image": f},
-                verify=False,
-                timeout=30,
-            )
-        resp.raise_for_status()
-        url = resp.json()["data"]["link"]
-        print(f"  Uploaded {img_path.name} -> {url}")
-        return url
-    except Exception as e:
-        print(f"  WARN: Imgur upload failed for {img_path.name}: {e}", file=sys.stderr)
-        return None
+def publish_images_to_github(local_paths: list[Path]) -> dict[Path, str]:
+    """Copy images to assets/, commit, push. Returns {local_path: raw_githubusercontent URL}."""
+    root = Path(__file__).parent.parent
+    ASSETS_DIR.mkdir(exist_ok=True)
+
+    for img_path in local_paths:
+        dest = ASSETS_DIR / img_path.name
+        dest.write_bytes(img_path.read_bytes())
+        print(f"  Copied {img_path.name} -> assets/")
+
+    subprocess.run(["git", "add", "assets/"], cwd=root, check=True, capture_output=True)
+
+    # Only commit if there are staged changes
+    diff = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=root, capture_output=True)
+    if diff.returncode != 0:
+        subprocess.run(
+            ["git", "commit", "-m", "assets: add post images for Medium"],
+            cwd=root, check=True, capture_output=True,
+        )
+        push = subprocess.run(["git", "push"], cwd=root, capture_output=True, text=True)
+        if push.returncode != 0:
+            print(f"  WARN: git push failed: {push.stderr.strip()}", file=sys.stderr)
+        else:
+            print("  Pushed assets/ to GitHub")
+    else:
+        print("  assets/ already up to date — skipping commit")
+
+    return {
+        p: f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/assets/{p.name}"
+        for p in local_paths
+    }
 
 
 def embed_local_images(html: str, base_dir: Path) -> str:
-    imgur_client_id = os.getenv("IMGUR_CLIENT_ID")
-    if not imgur_client_id:
-        print("  WARN: IMGUR_CLIENT_ID not set — images will not display on Medium")
-
-    def replace_src(m):
+    # First pass: collect all distinct local image paths
+    src_to_path: dict[str, Path] = {}
+    for m in re.finditer(r'<img[^>]+src="([^"]+)"', html):
         src = m.group(1)
         if src.startswith("http") or src.startswith("data:"):
-            return m.group(0)
+            continue
         img_path = (base_dir / src).resolve()
         if not img_path.exists():
             print(f"  WARN: image not found, skipping: {img_path}")
+            continue
+        src_to_path[src] = img_path
+
+    if not src_to_path:
+        return html
+
+    path_to_url = publish_images_to_github(list(src_to_path.values()))
+
+    def replace_src(m):
+        src = m.group(1)
+        img_path = src_to_path.get(src)
+        if img_path is None:
             return m.group(0)
-        if imgur_client_id:
-            url = upload_to_imgur(img_path, imgur_client_id)
-            if url:
-                return m.group(0).replace(src, url)
-        # Fallback: data URI (Medium will strip it, but preserves the attempt)
-        b64 = base64.b64encode(img_path.read_bytes()).decode()
-        data_uri = f"data:image/png;base64,{b64}"
-        print(f"  Embedded {img_path.name} as data URI ({len(b64)//1024}KB)")
-        return m.group(0).replace(src, data_uri)
+        url = path_to_url.get(img_path)
+        return m.group(0).replace(src, url) if url else m.group(0)
 
     return re.sub(r'<img[^>]+src="([^"]+)"', replace_src, html)
 
