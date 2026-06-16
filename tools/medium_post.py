@@ -151,6 +151,8 @@ def upload_image_via_api(img_path: Path, token: str) -> str | None:
 
 def publish_images_to_github(local_paths: list[Path]) -> dict[Path, str]:
     """Upload images to GitHub via API. Returns {local_path: raw_githubusercontent URL}."""
+    import time
+
     token = os.getenv("GITHUB_TOKEN")
     if not token:
         print("  WARN: GITHUB_TOKEN not set — images will not display on Medium", file=sys.stderr)
@@ -161,6 +163,10 @@ def publish_images_to_github(local_paths: list[Path]) -> dict[Path, str]:
         url = upload_image_via_api(img_path, token)
         if url:
             path_to_url[img_path] = url
+
+    if path_to_url:
+        print("  Waiting 8s for GitHub CDN to propagate...")
+        time.sleep(8)
 
     return path_to_url
 
