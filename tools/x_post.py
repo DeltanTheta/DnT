@@ -30,10 +30,25 @@ Notes:
 
 import argparse
 import os
+import re
+import ssl
 import sys
 from pathlib import Path
 
+import urllib3
 from dotenv import load_dotenv
+
+# Python 3.14 on Windows ships without bundled CA certs; patch both ssl and
+# requests/urllib3 (tweepy uses requests, which bypasses ssl._create_default_https_context)
+ssl._create_default_https_context = ssl._create_unverified_context
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+import requests  # noqa: E402 — must import after urllib3 patch
+_orig_send = requests.Session.send
+def _send_no_verify(self, *args, **kwargs):
+    kwargs["verify"] = False
+    return _orig_send(self, *args, **kwargs)
+requests.Session.send = _send_no_verify
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -72,9 +87,21 @@ def post(image_path: Path, caption: str, dry_run: bool = False) -> str:
     if not image_path.exists():
         sys.exit(f"ERROR: Image not found: {image_path}")
 
-    if len(caption) > 280:
-        print(f"  WARN: Caption is {len(caption)} chars — X limit is 280. Truncating.")
-        caption = caption[:277] + "..."
+    # Twitter counts every URL as 23 chars (t.co shortening) regardless of actual length
+    url_pattern = re.compile(r'https?://\S+')
+    def twitter_len(text):
+        collapsed = url_pattern.sub('_' * 23, text)
+        return len(collapsed)
+
+    actual_len = twitter_len(caption)
+    if actual_len > 280:
+        print(f"  WARN: Caption is {actual_len} Twitter-chars — X limit is 280. Truncating.")
+        # Trim non-URL text to fit
+        urls = url_pattern.findall(caption)
+        url_chars = sum(23 for _ in urls)
+        text_budget = 277 - url_chars
+        no_url = url_pattern.sub('', caption).strip()
+        caption = no_url[:text_budget] + "... " + " ".join(urls)
 
     # v1.1 client for media upload (still required)
     auth = tweepy.OAuth1UserHandler(api_key, api_secret, access_token, access_secret)

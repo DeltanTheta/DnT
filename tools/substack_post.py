@@ -32,8 +32,9 @@ from playwright.sync_api import sync_playwright
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-PASTE_WAIT_MS  = 2_000   # time to let TipTap process the paste event
-AUTOSAVE_WAIT  = 20_000  # ms to wait for Substack's auto-save URL change
+PASTE_WAIT_MS    = 2_000
+AUTOSAVE_WAIT    = 20_000
+TWITTER_STORAGE  = Path(__file__).parent.parent / ".tmp" / "twitter_auth.json"
 
 TABLE_CSS = """
   body { margin: 0; padding: 12px; background: white; font-family: -apple-system, sans-serif; }
@@ -168,11 +169,50 @@ def wait_for_autosave(page, editor_url: str) -> str:
     return page.url
 
 
-def run(publication: str, session: str, title: str, body_html: str, publish: bool, headless: bool, draft_dir: Path = Path(".")) -> str:
+def login_twitter() -> None:
+    """Open a browser for Twitter/X login and save session state for --share-x."""
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=False, channel="msedge")
+        context = browser.new_context(viewport={"width": 1280, "height": 900})
+        page = context.new_page()
+        page.goto("https://x.com/login", wait_until="networkidle", timeout=30_000)
+        print("\nLog in to X/Twitter in the browser window, then press Enter here...")
+        input()
+        TWITTER_STORAGE.parent.mkdir(parents=True, exist_ok=True)
+        context.storage_state(path=str(TWITTER_STORAGE))
+        browser.close()
+        print(f"  Twitter auth saved to {TWITTER_STORAGE}")
+
+
+def share_on_x(context, title: str, post_url: str) -> None:
+    """Open Twitter intent URL in a new tab and click Post."""
+    import urllib.parse
+    intent_url = "https://x.com/intent/tweet?text=" + urllib.parse.quote(f"{title}\n\n{post_url}")
+    print("  Sharing to X...")
+    x_page = context.new_page()
+    try:
+        x_page.goto(intent_url, wait_until="networkidle", timeout=20_000)
+        post_btn = x_page.wait_for_selector(
+            'button[data-testid="tweetButton"], button:has-text("Post"), button:has-text("Tweet")',
+            timeout=10_000,
+        )
+        post_btn.click()
+        x_page.wait_for_timeout(3_000)
+        print("  Posted to X.")
+    except PlaywrightTimeout:
+        print(f"  WARN: Could not auto-post to X — Twitter login may be required.")
+        print(f"        Run: python tools/substack_post.py --login-twitter")
+    finally:
+        x_page.close()
+
+
+def run(publication: str, session: str, title: str, body_html: str, publish: bool, headless: bool, share_x: bool = False, draft_dir: Path = Path(".")) -> str:
     """Drive the browser and return the resulting post URL."""
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=headless, slow_mo=100 if not headless else 0)
+        twitter_state = str(TWITTER_STORAGE) if (share_x and TWITTER_STORAGE.exists()) else None
         context = browser.new_context(
+            storage_state=twitter_state,
             permissions=["clipboard-read", "clipboard-write"],
             viewport={"width": 1280, "height": 900},
             ignore_https_errors=True,
@@ -247,16 +287,31 @@ def run(publication: str, session: str, title: str, body_html: str, publish: boo
             print("  Waiting for auto-save...")
 
         draft_url = wait_for_autosave(page, editor_url)
+
+        if share_x and publish:
+            share_on_x(context, title, draft_url)
+        elif share_x and not publish:
+            print("  NOTE: --share-x only fires on publish. Skipping X share for draft.")
+
         browser.close()
         return draft_url
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Post a Markdown draft to Substack via browser automation")
-    parser.add_argument("--file", required=True, help="Path to Markdown draft file")
+    parser.add_argument("--login-twitter", action="store_true", help="Save Twitter/X session for --share-x (run once)")
+    parser.add_argument("--file", help="Path to Markdown draft file")
     parser.add_argument("--publish", action="store_true", help="Publish immediately (default: save as draft)")
+    parser.add_argument("--share-x", action="store_true", help="Share to X/Twitter after publishing (requires --publish and --login-twitter setup)")
     parser.add_argument("--headless", action="store_true", help="Run browser in background (default: visible window)")
     args = parser.parse_args()
+
+    if args.login_twitter:
+        login_twitter()
+        return
+
+    if not args.file:
+        sys.exit("ERROR: --file is required (or use --login-twitter to set up X sharing)")
 
     publication = os.getenv("SUBSTACK_PUBLICATION")
     session = os.getenv("SUBSTACK_SESSION")
@@ -280,7 +335,7 @@ def main() -> None:
     print(f"  Source: {draft_path}")
     print(f"  Body  : {len(body_html):,} chars HTML")
 
-    url = run(publication, session, title, body_html, publish=args.publish, headless=args.headless, draft_dir=draft_path.parent)
+    url = run(publication, session, title, body_html, publish=args.publish, headless=args.headless, share_x=args.share_x, draft_dir=draft_path.parent)
 
     print(f"\n  OK  {url}")
     if not args.publish:

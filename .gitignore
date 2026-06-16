@@ -1,3 +1,6 @@
+# Brand assets (local only, not for version control)
+brand/
+
 # Environment and secrets
 .env
 credentials.json

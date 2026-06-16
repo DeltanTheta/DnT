@@ -164,10 +164,6 @@ def publish_images_to_github(local_paths: list[Path]) -> dict[Path, str]:
         if url:
             path_to_url[img_path] = url
 
-    if path_to_url:
-        print("  Waiting 8s for GitHub CDN to propagate...")
-        time.sleep(8)
-
     return path_to_url
 
 
@@ -187,17 +183,24 @@ def embed_local_images(html: str, base_dir: Path) -> str:
     if not src_to_path:
         return html
 
-    path_to_url = publish_images_to_github(list(src_to_path.values()))
+    # Upload images to GitHub assets/ for storage
+    publish_images_to_github(list(src_to_path.values()))
 
-    def replace_src(m):
+    # Replace img tags with visible placeholders — Medium's automated proxy is
+    # unreliable for external URLs. User inserts images manually via the editor.
+    print("\n  Images must be inserted manually in Medium:")
+    for img_path in src_to_path.values():
+        print(f"    -> Look for [INSERT IMAGE: {img_path.name}] in the draft")
+        print(f"       File: assets/{img_path.name}  (or drag from .tmp/)")
+
+    def replace_img(m):
         src = m.group(1)
         img_path = src_to_path.get(src)
         if img_path is None:
             return m.group(0)
-        url = path_to_url.get(img_path)
-        return m.group(0).replace(src, url) if url else m.group(0)
+        return f'<p>[INSERT IMAGE: {img_path.name}]</p>'
 
-    return re.sub(r'<img[^>]+src="([^"]+)"', replace_src, html)
+    return re.sub(r'<img[^>]+src="([^"]+)"[^>]*/?>', replace_img, html)
 
 
 def paste_html(page, html: str) -> None:
@@ -360,9 +363,11 @@ def run(title: str, body_html: str, publish: bool, headless: bool,
                 "  Inspect the editor element and update BODY_SELECTOR in tools/medium_post.py."
             )
 
-        print(f"  Pasting body ({len(full_html):,} chars)...")
+        # Scale paste wait with content size — large posts need more render time
+        paste_wait = max(PASTE_WAIT_MS, min(20_000, len(full_html) // 2))
+        print(f"  Pasting body ({len(full_html):,} chars), waiting {paste_wait // 1000}s...")
         paste_html(page, full_html)
-        page.wait_for_timeout(PASTE_WAIT_MS)
+        page.wait_for_timeout(paste_wait)
 
         # Trigger autosave
         page.keyboard.press("End")
