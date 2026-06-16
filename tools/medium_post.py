@@ -20,10 +20,11 @@ Optional .env vars (have sensible defaults):
     MEDIUM_SUBSTACK_URL — your Substack URL (default: https://deltantheta.substack.com)
     MEDIUM_GITHUB_URL   — your GitHub repo URL (default: https://github.com/DeltanTheta/DnT)
 
-Notes:
-    - Images are copied to assets/, committed, and pushed to GitHub before posting.
-      Medium then references them via raw.githubusercontent.com URLs, which it renders correctly.
-      Requires MEDIUM_GITHUB_URL to be set (or uses the default DeltanTheta/DnT repo).
+Optional .env vars (images):
+    GITHUB_TOKEN        — Personal Access Token with repo scope (github.com → Settings →
+                          Developer settings → Personal access tokens → Fine-grained or Classic).
+                          When set, local images are uploaded to assets/ via the GitHub API and
+                          referenced by raw.githubusercontent.com URL, which Medium renders correctly.
     - Medium enforces ~2 published stories per day
     - BMC embeds are not supported on Medium; a plain link is used instead
     - AI-assisted disclosure: set manually on Medium after drafting if desired
@@ -40,14 +41,19 @@ import argparse
 import base64
 import os
 import re
-import subprocess
+import ssl
 import sys
 from pathlib import Path
+from urllib import request as urllib_request
+from urllib.error import HTTPError
 
+import json
 import markdown
 from dotenv import load_dotenv
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
+
+ssl._create_default_https_context = ssl._create_unverified_context
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -102,37 +108,61 @@ def extract_title(text: str) -> tuple[str, str]:
     return "Untitled", text
 
 
-def publish_images_to_github(local_paths: list[Path]) -> dict[Path, str]:
-    """Copy images to assets/, commit, push. Returns {local_path: raw_githubusercontent URL}."""
-    root = Path(__file__).parent.parent
-    ASSETS_DIR.mkdir(exist_ok=True)
-
-    for img_path in local_paths:
-        dest = ASSETS_DIR / img_path.name
-        dest.write_bytes(img_path.read_bytes())
-        print(f"  Copied {img_path.name} -> assets/")
-
-    subprocess.run(["git", "add", "assets/"], cwd=root, check=True, capture_output=True)
-
-    # Only commit if there are staged changes
-    diff = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=root, capture_output=True)
-    if diff.returncode != 0:
-        subprocess.run(
-            ["git", "commit", "-m", "assets: add post images for Medium"],
-            cwd=root, check=True, capture_output=True,
-        )
-        push = subprocess.run(["git", "push"], cwd=root, capture_output=True, text=True)
-        if push.returncode != 0:
-            print(f"  WARN: git push failed: {push.stderr.strip()}", file=sys.stderr)
-        else:
-            print("  Pushed assets/ to GitHub")
-    else:
-        print("  assets/ already up to date — skipping commit")
-
-    return {
-        p: f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/assets/{p.name}"
-        for p in local_paths
+def upload_image_via_api(img_path: Path, token: str) -> str | None:
+    """Upload a single image to GitHub repo via Contents API. Returns raw URL or None."""
+    api_url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/assets/{img_path.name}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
     }
+
+    # Check if file already exists (need its SHA to update)
+    sha = None
+    try:
+        req = urllib_request.Request(api_url, headers=headers)
+        with urllib_request.urlopen(req) as resp:
+            sha = json.loads(resp.read())["sha"]
+    except HTTPError as e:
+        if e.code != 404:
+            print(f"  WARN: GitHub API check failed for {img_path.name}: {e}", file=sys.stderr)
+            return None
+
+    payload = {
+        "message": f"assets: add {img_path.name} for Medium post",
+        "content": base64.b64encode(img_path.read_bytes()).decode(),
+        "branch": GITHUB_BRANCH,
+    }
+    if sha:
+        payload["sha"] = sha
+
+    try:
+        data = json.dumps(payload).encode()
+        req = urllib_request.Request(api_url, data=data, headers=headers, method="PUT")
+        with urllib_request.urlopen(req) as resp:
+            resp.read()
+        raw_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/assets/{img_path.name}"
+        print(f"  Uploaded {img_path.name} -> {raw_url}")
+        return raw_url
+    except Exception as e:
+        print(f"  WARN: GitHub API upload failed for {img_path.name}: {e}", file=sys.stderr)
+        return None
+
+
+def publish_images_to_github(local_paths: list[Path]) -> dict[Path, str]:
+    """Upload images to GitHub via API. Returns {local_path: raw_githubusercontent URL}."""
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        print("  WARN: GITHUB_TOKEN not set — images will not display on Medium", file=sys.stderr)
+        return {}
+
+    path_to_url = {}
+    for img_path in local_paths:
+        url = upload_image_via_api(img_path, token)
+        if url:
+            path_to_url[img_path] = url
+
+    return path_to_url
 
 
 def embed_local_images(html: str, base_dir: Path) -> str:
