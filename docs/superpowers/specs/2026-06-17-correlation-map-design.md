@@ -33,7 +33,7 @@ Standalone. No imports from other `tools/` scripts. Uses `yfinance` for price da
 | `--tickers` | `SPY IWM QQQ TLT IEF GLD DX-Y.NYB` | Space-separated Yahoo Finance ticker symbols |
 | `--window` | `63` | Lookback in trading days for each correlation snapshot |
 | `--prior-offset` | `5` | Trading days to shift the "prior" window back (5 = 1 week) |
-| `--lookback-days` | `400` | Total days of price history to fetch (must be > window + prior-offset + buffer) |
+| `--lookback-days` | `400` | Calendar days of price history to fetch (400 cal days ≈ 275 trading days, well above any window+offset combo) |
 | `--start` | `None` | Optional explicit start date (YYYY-MM-DD); overrides `--lookback-days` |
 | `--end` | `None` | Optional explicit end date (YYYY-MM-DD); defaults to today |
 | `--labels` | `None` | Display name overrides as `TICKER:LABEL` pairs, e.g. `DX-Y.NYB:DXY IEF:10Y` |

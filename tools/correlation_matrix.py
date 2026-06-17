@@ -14,7 +14,6 @@ Requires: yfinance>=0.2.0 seaborn matplotlib pandas numpy curl_cffi
 import os
 import ssl
 import sys
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
