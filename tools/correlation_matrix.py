@@ -85,6 +85,8 @@ def fetch_closes(tickers: list[str], start: str, end: str | None) -> pd.DataFram
 
 def print_top_movers(current: pd.DataFrame, prior: pd.DataFrame, n: int = 5) -> None:
     """Print the top n ticker pairs ranked by absolute correlation change."""
+    if current.columns.tolist() != prior.columns.tolist():
+        raise ValueError("current and prior correlation matrices must have identical columns")
     delta = current - prior
     tickers = list(current.columns)
     pairs = []
@@ -92,6 +94,8 @@ def print_top_movers(current: pd.DataFrame, prior: pd.DataFrame, n: int = 5) -> 
         for j in range(i + 1, len(tickers)):
             a, b = tickers[i], tickers[j]
             d = delta.loc[a, b]
+            if pd.isna(d):
+                continue
             c = current.loc[a, b]
             p = prior.loc[a, b]
             pairs.append((abs(d), a, b, p, c, d))
