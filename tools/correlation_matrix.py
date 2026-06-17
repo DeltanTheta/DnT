@@ -171,3 +171,94 @@ def plot_three_panel(
     plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close()
     print(f"\nChart saved -> {out_path}")
+
+
+def main() -> None:
+    import argparse
+    from datetime import datetime, timedelta
+
+    parser = argparse.ArgumentParser(
+        description="Compute and visualize macro asset correlation matrix (current vs prior)"
+    )
+    parser.add_argument("--tickers", nargs="+", default=DEFAULT_TICKERS,
+                        help="Ticker symbols (default: SPY IWM QQQ TLT IEF GLD DX-Y.NYB)")
+    parser.add_argument("--window", type=int, default=63,
+                        help="Lookback window in trading days (default: 63)")
+    parser.add_argument("--prior-offset", type=int, default=5, dest="prior_offset",
+                        help="Trading days to shift the prior window back (default: 5 = 1 week)")
+    parser.add_argument("--lookback-days", type=int, default=400, dest="lookback_days",
+                        help="Calendar days of price history to fetch (default: 400)")
+    parser.add_argument("--start", default=None,
+                        help="Override start date YYYY-MM-DD (ignores --lookback-days)")
+    parser.add_argument("--end", default=None,
+                        help="Override end date YYYY-MM-DD (default: today)")
+    parser.add_argument("--labels", nargs="+", default=[],
+                        help="Display name overrides: TICKER:LABEL pairs e.g. DX-Y.NYB:DXY")
+    parser.add_argument("--out", default=None,
+                        help="Output PNG path (default: .tmp/correlation_matrix_YYYYMMDD.png)")
+    args = parser.parse_args()
+
+    end_date = args.end or datetime.today().strftime("%Y-%m-%d")
+    if args.start:
+        start_date = args.start
+    else:
+        start_date = (
+            datetime.strptime(end_date, "%Y-%m-%d") - timedelta(days=args.lookback_days)
+        ).strftime("%Y-%m-%d")
+
+    label_map = dict(DEFAULT_LABELS)
+    for pair in args.labels:
+        if ":" in pair:
+            ticker, label = pair.split(":", 1)
+            label_map[ticker] = label
+
+    print(f"\nFetching prices: {', '.join(args.tickers)}")
+    print(f"  Date range: {start_date} to {end_date}\n")
+
+    prices = fetch_closes(args.tickers, start=start_date, end=end_date)
+    if prices.empty:
+        sys.exit("No price data fetched — check tickers and network.")
+
+    returns = compute_log_returns(prices)
+    min_needed = args.window + args.prior_offset
+    if len(returns) < min_needed:
+        sys.exit(
+            f"Not enough data: need {min_needed} trading-day rows, got {len(returns)}. "
+            f"Increase --lookback-days."
+        )
+
+    current_corr = correlation_window(returns, end_offset=0, window=args.window)
+    prior_corr   = correlation_window(returns, end_offset=args.prior_offset, window=args.window)
+    delta_corr   = current_corr - prior_corr
+
+    def window_label(end_offset: int) -> str:
+        if end_offset == 0:
+            sl = returns.iloc[-args.window:]
+        else:
+            sl = returns.iloc[-(args.window + end_offset):-end_offset]
+        return f"{sl.index[0].strftime('%b %d')} – {sl.index[-1].strftime('%b %d, %Y')}"
+
+    current_label = window_label(0)
+    prior_label   = window_label(args.prior_offset)
+
+    print_top_movers(current_corr, prior_corr)
+
+    today_str = datetime.today().strftime("%Y%m%d")
+    out_path = args.out or str(
+        Path(__file__).parent.parent / ".tmp" / f"correlation_matrix_{today_str}.png"
+    )
+
+    plot_three_panel(
+        current=current_corr,
+        prior=prior_corr,
+        delta=delta_corr,
+        labels=label_map,
+        current_label=current_label,
+        prior_label=prior_label,
+        out_path=out_path,
+        window=args.window,
+    )
+
+
+if __name__ == "__main__":
+    main()
