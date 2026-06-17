@@ -21,6 +21,8 @@ import pandas as pd
 from dotenv import load_dotenv
 import yfinance as yf
 from curl_cffi import requests as curl_requests
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 os.environ["CURL_CA_BUNDLE"] = ""
 os.environ["REQUESTS_CA_BUNDLE"] = ""
@@ -104,3 +106,68 @@ def print_top_movers(current: pd.DataFrame, prior: pd.DataFrame, n: int = 5) -> 
     for _, a, b, p, c, d in pairs[:n]:
         sign = "+" if d >= 0 else ""
         print(f"  {a} / {b:<14}  {p:+.2f} → {c:+.2f}  ({sign}{d:.2f})")
+
+
+def plot_three_panel(
+    current: pd.DataFrame,
+    prior: pd.DataFrame,
+    delta: pd.DataFrame,
+    labels: dict[str, str],
+    current_label: str,
+    prior_label: str,
+    out_path: str,
+) -> None:
+    """Render a 3-panel (current / prior / delta) correlation heatmap and save to PNG."""
+    def relabel(df: pd.DataFrame) -> pd.DataFrame:
+        return df.rename(index=labels, columns=labels)
+
+    cur = relabel(current)
+    pri = relabel(prior)
+    dlt = relabel(delta)
+
+    n = len(cur)
+    diag_mask = np.eye(n, dtype=bool)
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    fig.patch.set_facecolor("white")
+
+    kw_base = dict(
+        annot=True,
+        linewidths=0.5,
+        linecolor="#e5e5e5",
+        cbar=True,
+        square=True,
+        annot_kws={"size": 9},
+    )
+
+    # Panel 1 — Current
+    sns.heatmap(cur, ax=axes[0], mask=diag_mask,
+                cmap="RdBu_r", vmin=-1, vmax=1, fmt=".2f",
+                cbar_kws={"shrink": 0.8}, **kw_base)
+    axes[0].set_title(f"Current\n{current_label}", fontsize=11, fontweight="bold")
+
+    # Panel 2 — Prior (1 week)
+    sns.heatmap(pri, ax=axes[1], mask=diag_mask,
+                cmap="RdBu_r", vmin=-1, vmax=1, fmt=".2f",
+                cbar_kws={"shrink": 0.8}, **kw_base)
+    axes[1].set_title(f"Prior (1 week)\n{prior_label}", fontsize=11, fontweight="bold")
+
+    # Panel 3 — Delta
+    sns.heatmap(dlt, ax=axes[2], mask=diag_mask,
+                cmap="RdYlGn", vmin=-0.5, vmax=0.5, fmt="+.2f",
+                cbar_kws={"shrink": 0.8}, **kw_base)
+    axes[2].set_title("Delta (Current − Prior)", fontsize=11, fontweight="bold")
+
+    fig.suptitle(
+        f"63-Day Correlation Snapshot  |  Current: {current_label}  vs  Prior: {prior_label}",
+        fontsize=13, fontweight="bold", y=1.02,
+    )
+    fig.text(0.5, -0.02,
+             "Source: Yahoo Finance via yfinance  |  DeltaTheta",
+             ha="center", fontsize=8, color="#6B7280")
+
+    plt.tight_layout()
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close()
+    print(f"\nChart saved -> {out_path}")
