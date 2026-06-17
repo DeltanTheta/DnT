@@ -116,6 +116,7 @@ def plot_three_panel(
     current_label: str,
     prior_label: str,
     out_path: str,
+    window: int = 63,
 ) -> None:
     """Render a 3-panel (current / prior / delta) correlation heatmap and save to PNG."""
     def relabel(df: pd.DataFrame) -> pd.DataFrame:
@@ -128,7 +129,7 @@ def plot_three_panel(
     n = len(cur)
     diag_mask = np.eye(n, dtype=bool)
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6), constrained_layout=True)
     fig.patch.set_facecolor("white")
 
     kw_base = dict(
@@ -159,14 +160,13 @@ def plot_three_panel(
     axes[2].set_title("Delta (Current − Prior)", fontsize=11, fontweight="bold")
 
     fig.suptitle(
-        f"63-Day Correlation Snapshot  |  Current: {current_label}  vs  Prior: {prior_label}",
-        fontsize=13, fontweight="bold", y=1.02,
+        f"{window}-Day Correlation Snapshot  |  Current: {current_label}  vs  Prior: {prior_label}",
+        fontsize=13, fontweight="bold",
     )
     fig.text(0.5, -0.02,
              "Source: Yahoo Finance via yfinance  |  DeltaTheta",
              ha="center", fontsize=8, color="#6B7280")
 
-    plt.tight_layout()
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close()
