@@ -211,6 +211,8 @@ def main() -> None:
         if ":" in pair:
             ticker, label = pair.split(":", 1)
             label_map[ticker] = label
+        else:
+            print(f"  WARN: ignoring label '{pair}' — expected TICKER:LABEL format", file=sys.stderr)
 
     print(f"\nFetching prices: {', '.join(args.tickers)}")
     print(f"  Date range: {start_date} to {end_date}\n")
