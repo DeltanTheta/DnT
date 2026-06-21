@@ -155,11 +155,21 @@ def make_chart(
     BG = "#0a0f1e"
     GRID = "#1e2a3a"
 
-    fig, ax = plt.subplots(figsize=(14, 7), dpi=150)
+    has_diff = "HY" in df.columns and "IG" in df.columns
+
+    if has_diff:
+        fig, (ax, ax_diff) = plt.subplots(
+            2, 1, figsize=(14, 9), dpi=150,
+            gridspec_kw={"height_ratios": [3, 1], "hspace": 0.06},
+        )
+    else:
+        fig, ax = plt.subplots(figsize=(14, 7), dpi=150)
+        ax_diff = None
+
     fig.patch.set_facecolor(BG)
     ax.set_facecolor(BG)
 
-    # Recession shading
+    # Recession shading (top panel only)
     drew_recession = False
     if not recessions.empty:
         in_rec = False
@@ -194,7 +204,6 @@ def make_chart(
         color = SERIES_COLORS.get(key, "#ffffff")
         _, label = SERIES_MAP[key]
         ax.plot(s.index, s.values, color=color, lw=1.8, label=label, zorder=3)
-        # Current value marker
         ax.scatter([s.index[-1]], [s.iloc[-1]], color=color, s=40, zorder=4)
         ax.annotate(
             f"{s.iloc[-1]:.2f}%",
@@ -207,14 +216,15 @@ def make_chart(
             va="center",
         )
 
-    # Axes styling
-    ax.set_facecolor(BG)
+    # Top panel styling
     for spine in ax.spines.values():
         spine.set_color(GRID)
     ax.tick_params(colors="#8899aa", labelsize=9)
     ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.0f%%"))
     ax.grid(True, color=GRID, linewidth=0.6, linestyle="--", alpha=0.7)
     ax.set_xlim(df.index[0], df.index[-1])
+    if ax_diff is not None:
+        ax.tick_params(labelbottom=False)  # hide x-axis labels on top panel
 
     # Legend
     handles, labels = ax.get_legend_handles_labels()
@@ -231,8 +241,36 @@ def make_chart(
         f"Credit Spread History  —  {now}",
         color="#e8e8e8", fontsize=13, fontweight="bold", pad=14,
     )
-    ax.set_xlabel("", color="#8899aa")
     ax.set_ylabel("Option-Adjusted Spread (%)", color="#8899aa", fontsize=9)
+
+    # Bottom panel — differential
+    if ax_diff is not None:
+        ax_diff.set_facecolor(BG)
+        hy = df["HY"].dropna()
+        ig = df["IG"].dropna()
+        common = hy.index.intersection(ig.index)
+        diff = hy.loc[common] - ig.loc[common]
+
+        ax_diff.plot(diff.index, diff.values, color="#aaaaaa", lw=1.5)
+        median_val = diff.median()
+        ax_diff.axhline(median_val, color="#aaaaaa", lw=0.8, linestyle="--", alpha=0.6)
+        ax_diff.annotate(
+            f"Median {median_val:.2f}%",
+            xy=(diff.index[-1], median_val),
+            xytext=(8, 4),
+            textcoords="offset points",
+            color="#aaaaaa",
+            fontsize=8,
+            va="bottom",
+        )
+
+        for spine in ax_diff.spines.values():
+            spine.set_color(GRID)
+        ax_diff.tick_params(colors="#8899aa", labelsize=8)
+        ax_diff.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f%%"))
+        ax_diff.grid(True, color=GRID, linewidth=0.6, linestyle="--", alpha=0.7)
+        ax_diff.set_ylabel("HY–IG (%)", color="#8899aa", fontsize=8)
+        ax_diff.set_xlim(df.index[0], df.index[-1])
 
     fig.tight_layout(pad=1.2)
     TMP.mkdir(exist_ok=True)

@@ -56,3 +56,25 @@ def test_differential_value_is_hy_minus_ig():
     out = capture_print_summary(df, ["HY", "IG"])
     # Last HY = 2.00, last IG = 0.70, diff = 1.30
     assert "1.30%" in out
+
+
+def test_make_chart_creates_file_single_panel():
+    import matplotlib
+    matplotlib.use("Agg")
+    from tools.credit_spreads import make_chart
+    df = make_mock_df(("HY",))
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "chart.png"
+        make_chart(df, ["HY"], pd.Series(dtype=float), out)
+        assert out.exists() and out.stat().st_size > 0
+
+
+def test_make_chart_creates_file_two_panel():
+    import matplotlib
+    matplotlib.use("Agg")
+    from tools.credit_spreads import make_chart
+    df = make_mock_df(("HY", "IG"))
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "chart.png"
+        make_chart(df, ["HY", "IG"], pd.Series(dtype=float), out)
+        assert out.exists() and out.stat().st_size > 0
