@@ -279,6 +279,133 @@ def make_chart(
     print(f"  Chart -> {out_path}")
 
 
+def make_stack_chart(
+    df: pd.DataFrame,
+    series_keys: list[str],
+    recessions: pd.Series,
+    out_path: Path,
+) -> None:
+    from matplotlib.patches import Patch
+
+    BG = "#0a0f1e"
+    GRID = "#1e2a3a"
+
+    fig, ax = plt.subplots(figsize=(14, 7), dpi=150)
+    fig.patch.set_facecolor(BG)
+    ax.set_facecolor(BG)
+
+    # Align all available series to a common date index
+    hy  = df["HY"].dropna()  if "HY"  in df.columns else None
+    ig  = df["IG"].dropna()  if "IG"  in df.columns else None
+    ccc = df["CCC"].dropna() if "CCC" in df.columns else None
+
+    idx = ig.index
+    if hy is not None:
+        idx = idx.intersection(hy.index)
+    if ccc is not None:
+        idx = idx.intersection(ccc.index)
+
+    ig_vals  = ig.loc[idx].values
+    hy_vals  = hy.loc[idx].values  if hy  is not None else None
+    ccc_vals = ccc.loc[idx].values if ccc is not None else None
+    zeros    = np.zeros(len(idx))
+
+    # Recession shading
+    if not recessions.empty:
+        in_rec    = False
+        rec_start = None
+        chart_start = idx[0]
+        chart_end   = idx[-1]
+        for date, val in recessions.items():
+            if val == 1 and not in_rec:
+                rec_start = date
+                in_rec = True
+            elif val == 0 and in_rec:
+                if rec_start <= chart_end and date >= chart_start:
+                    ax.axvspan(
+                        max(rec_start, chart_start), min(date, chart_end),
+                        color="#c0392b", alpha=0.12, zorder=0,
+                    )
+                in_rec = False
+        if in_rec and rec_start is not None and rec_start <= chart_end:
+            ax.axvspan(max(rec_start, chart_start), chart_end,
+                       color="#c0392b", alpha=0.12, zorder=0)
+
+    # Layer 1: IG base (0 → IG)
+    ax.fill_between(idx, zeros, ig_vals, color="#4a9eff", alpha=0.5, zorder=1)
+    ax.plot(idx, ig_vals, color="#4a9eff", lw=1.2, zorder=2)
+
+    # Layer 2: HY–IG quality premium (IG → HY)
+    if hy_vals is not None:
+        ax.fill_between(idx, ig_vals, hy_vals, color="#f5a623", alpha=0.5, zorder=1)
+        ax.plot(idx, hy_vals, color="#f5a623", lw=1.2, zorder=2)
+
+    # Layer 3: CCC premium (HY → CCC)
+    if ccc_vals is not None and hy_vals is not None:
+        ax.fill_between(idx, hy_vals, ccc_vals, color="#e05c5c", alpha=0.5, zorder=1)
+        ax.plot(idx, ccc_vals, color="#e05c5c", lw=1.2, zorder=2)
+
+    # Right-edge annotations
+    last = idx[-1]
+    ig_last = ig_vals[-1]
+    ax.annotate(
+        f"IG {ig_last:.2f}%",
+        xy=(last, ig_last / 2),
+        xytext=(10, 0), textcoords="offset points",
+        color="#4a9eff", fontsize=9, fontweight="bold", va="center",
+    )
+    if hy_vals is not None:
+        hy_last   = hy_vals[-1]
+        prem_last = hy_last - ig_last
+        ax.annotate(
+            f"Quality Premium {prem_last:.2f}%",
+            xy=(last, ig_last + prem_last / 2),
+            xytext=(10, 0), textcoords="offset points",
+            color="#f5a623", fontsize=9, fontweight="bold", va="center",
+        )
+        if ccc_vals is not None:
+            ccc_last     = ccc_vals[-1]
+            ccc_prem_last = ccc_last - hy_last
+            ax.annotate(
+                f"CCC Premium {ccc_prem_last:.2f}%",
+                xy=(last, hy_last + ccc_prem_last / 2),
+                xytext=(10, 0), textcoords="offset points",
+                color="#e05c5c", fontsize=9, fontweight="bold", va="center",
+            )
+
+    # Styling
+    for spine in ax.spines.values():
+        spine.set_color(GRID)
+    ax.tick_params(colors="#8899aa", labelsize=9)
+    ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.0f%%"))
+    ax.grid(True, color=GRID, linewidth=0.6, linestyle="--", alpha=0.7)
+    ax.set_xlim(idx[0], idx[-1])
+    ax.set_ylabel("Option-Adjusted Spread (%)", color="#8899aa", fontsize=9)
+
+    now = datetime.now().strftime("%Y-%m-%d")
+    ax.set_title(
+        f"Credit Spread Stack  —  {now}",
+        color="#e8e8e8", fontsize=13, fontweight="bold", pad=14,
+    )
+
+    legend_elements = [
+        Patch(facecolor="#4a9eff", alpha=0.7, label="IG Base"),
+        Patch(facecolor="#f5a623", alpha=0.7, label="HY–IG Quality Premium"),
+    ]
+    if ccc_vals is not None:
+        legend_elements.append(Patch(facecolor="#e05c5c", alpha=0.7, label="CCC Premium"))
+    if not recessions.empty:
+        legend_elements.append(Patch(facecolor="#c0392b", alpha=0.3, label="NBER Recession"))
+    ax.legend(handles=legend_elements, framealpha=0.15, edgecolor=GRID,
+              labelcolor="#cccccc", fontsize=9, loc="upper left")
+
+    fig.tight_layout(pad=1.2)
+    TMP.mkdir(exist_ok=True)
+    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=BG, edgecolor="none")
+    plt.close()
+    print(f"  Stack chart -> {out_path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Credit spread snapshot from FRED")
     parser.add_argument(
@@ -307,6 +434,9 @@ def main() -> None:
         today = datetime.now().strftime("%Y%m%d")
         out = TMP / f"credit_spreads_{today}.png"
         make_chart(df, args.series, recessions, out)
+        if "HY" in df.columns and "IG" in df.columns:
+            stack_out = TMP / f"credit_spreads_stack_{today}.png"
+            make_stack_chart(df, args.series, recessions, stack_out)
 
 
 if __name__ == "__main__":

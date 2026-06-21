@@ -78,3 +78,25 @@ def test_make_chart_creates_file_two_panel():
         out = Path(d) / "chart.png"
         make_chart(df, ["HY", "IG"], pd.Series(dtype=float), out)
         assert out.exists() and out.stat().st_size > 0
+
+
+def test_make_stack_chart_creates_file():
+    import matplotlib
+    matplotlib.use("Agg")
+    from tools.credit_spreads import make_stack_chart
+    df = make_mock_df(("HY", "IG", "CCC"))
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "stack.png"
+        make_stack_chart(df, ["HY", "IG", "CCC"], pd.Series(dtype=float), out)
+        assert out.exists() and out.stat().st_size > 0
+
+
+def test_make_stack_chart_hy_ig_only():
+    import matplotlib
+    matplotlib.use("Agg")
+    from tools.credit_spreads import make_stack_chart
+    df = make_mock_df(("HY", "IG"))
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "stack.png"
+        make_stack_chart(df, ["HY", "IG"], pd.Series(dtype=float), out)
+        assert out.exists() and out.stat().st_size > 0
