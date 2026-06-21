@@ -272,7 +272,8 @@ def make_chart(
         ax_diff.set_ylabel("HY–IG (%)", color="#8899aa", fontsize=8)
         ax_diff.set_xlim(df.index[0], df.index[-1])
 
-    fig.tight_layout(pad=1.2)
+    if not has_diff:
+        fig.tight_layout(pad=1.2)
     TMP.mkdir(exist_ok=True)
     plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=BG, edgecolor="none")
     plt.close()
@@ -295,9 +296,12 @@ def make_stack_chart(
     ax.set_facecolor(BG)
 
     # Align all available series to a common date index
-    hy  = df["HY"].dropna()  if "HY"  in df.columns else None
+    hy  = df["HY"].dropna()  if ("HY"  in df.columns and "HY"  in series_keys) else None
     ig  = df["IG"].dropna()  if "IG"  in df.columns else None
-    ccc = df["CCC"].dropna() if "CCC" in df.columns else None
+    ccc = df["CCC"].dropna() if ("CCC" in df.columns and "CCC" in series_keys) else None
+
+    if ig is None:
+        raise ValueError("make_stack_chart requires IG data in df")
 
     idx = ig.index
     if hy is not None:

@@ -100,3 +100,14 @@ def test_make_stack_chart_hy_ig_only():
         out = Path(d) / "stack.png"
         make_stack_chart(df, ["HY", "IG"], pd.Series(dtype=float), out)
         assert out.exists() and out.stat().st_size > 0
+
+
+def test_make_stack_chart_raises_without_ig():
+    import matplotlib
+    matplotlib.use("Agg")
+    from tools.credit_spreads import make_stack_chart
+    df = make_mock_df(("HY",))  # no IG
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "stack.png"
+        with pytest.raises(ValueError, match="requires IG"):
+            make_stack_chart(df, ["HY"], pd.Series(dtype=float), out)
