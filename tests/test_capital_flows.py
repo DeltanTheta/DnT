@@ -105,9 +105,10 @@ def test_derive_alignment_two_over():
 def test_compute_price_return_positive():
     from tools.capital_flows import compute_price_return
     df = make_mock_ohlcv(60, close_position=0.5)
-    # All closes are equal (flat synthetic data) so return ≈ 0
     ret = compute_price_return(df, 15)
     assert isinstance(ret, float)
+    assert not np.isnan(ret)
+    assert ret == pytest.approx(0.0)
 
 def test_compute_price_return_insufficient_data():
     from tools.capital_flows import compute_price_return
@@ -154,6 +155,14 @@ def test_position_call_medium_long_over():
 def test_position_call_short_medium_over():
     from tools.capital_flows import make_position_call
     assert make_position_call("OVER", "OVER", "NEUT") == "OVERWEIGHT  2W–30D"
+
+def test_position_call_medium_long_under():
+    from tools.capital_flows import make_position_call
+    assert make_position_call("NEUT", "UNDER", "UNDER") == "UNDERWEIGHT  30D–90D"
+
+def test_position_call_short_medium_under():
+    from tools.capital_flows import make_position_call
+    assert make_position_call("UNDER", "UNDER", "NEUT") == "UNDERWEIGHT  2W–30D"
 
 def test_position_call_split_over():
     from tools.capital_flows import make_position_call
