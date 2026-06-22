@@ -305,8 +305,10 @@ def render_heatmap(snap: pd.DataFrame, as_of: str, out_path: str) -> None:
                     fontsize=8, color=text_color)
         # Mark divergence on the 15D column (index 1)
         if snap.iloc[i]["div_flag"]:
-            ax.text(1.42, i - 0.38, "D", fontsize=6.5, color="#F59E0B",
-                    fontweight="bold")
+            ax.text(1.38, i - 0.28, "D", fontsize=8, color="#111827",
+                    fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.15", facecolor="#F59E0B",
+                              edgecolor="none", alpha=0.92))
 
     ax.set_title(
         f"Capital Flow Heatmap  |  5 / 15 / 30-Day CMF  |  As of {as_of}",
