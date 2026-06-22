@@ -16,9 +16,9 @@ This post introduces the expanded tool: three CMF windows (5 / 15 / 30 days), a 
 
 The CMF formula doesn't change. What changes is the question you're asking:
 
-- **5-day window (~2 weeks):** Short-term pressure. What has flow been doing this week? Useful for near-term positioning but noisy — one large down-day can dominate.
-- **15-day window (~30 days):** Medium-term trend. This is the post 13 signal. It smooths most noise while still responding to meaningful rotations.
-- **30-day window (~90 days):** Structural flow. What has capital been doing over the past quarter? This is the signal that matters for longer holds.
+- **5-day window (~1 week):** Short-term pressure. What has flow been doing this week? Useful for near-term positioning but noisy — one large down-day can dominate.
+- **15-day window (~3 weeks):** Medium-term trend. This is the post 13 signal. It smooths most noise while still responding to meaningful rotations.
+- **30-day window (~6 weeks):** Structural flow. What has capital been doing over the past few weeks? This is the signal that matters for longer holds.
 
 The three windows don't just layer context on top of each other — they produce a **momentum alignment score**. When all three agree in direction (all positive or all negative), the signal has cross-timeframe conviction. When they split, you have a transition or a mixed environment. That distinction drives the positioning call.
 

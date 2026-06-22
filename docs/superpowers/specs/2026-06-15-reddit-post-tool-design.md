@@ -86,3 +86,4 @@ REDDIT_SUBSTACK_URL   — https://deltantheta.substack.com (used in footer)
 - Image uploads (Reddit image+text combos require a separate upload endpoint; Substack link provides the chart)
 - Scheduling / delayed posting
 - Comment monitoring or reply automation
+

@@ -44,6 +44,15 @@ SERIES_COLORS = {
     "CCC": "#e05c5c",
 }
 
+# HY OAS regime bands (upper bound in %, label, fill color)
+HY_REGIMES = [
+    (3.0,  "Deep Green", "#00cc55"),
+    (4.5,  "Green",      "#66cc44"),
+    (6.0,  "Yellow",     "#ddcc00"),
+    (8.0,  "Orange",     "#ff8800"),
+    (None, "Red",        "#cc2222"),
+]
+
 RECESSION_ID = "USREC"
 
 DEFAULT_SERIES = ["HY", "IG"]
@@ -195,6 +204,24 @@ def make_chart(
                     color="#c0392b", alpha=0.15, zorder=0,
                 )
                 drew_recession = True
+
+    # HY regime bands (drawn before series lines so lines render on top)
+    if "HY" in series_keys:
+        data_max = max(df[k].max() for k in series_keys if k in df.columns)
+        y_ceiling = max(data_max * 1.15, 10.0)
+        lower = 0
+        for upper, regime_label, color in HY_REGIMES:
+            band_top = upper if upper is not None else y_ceiling
+            ax.axhspan(lower, band_top, color=color, alpha=0.07, zorder=0)
+            mid = (lower + min(band_top, y_ceiling)) / 2
+            if mid <= y_ceiling:
+                ax.annotate(
+                    regime_label,
+                    xy=(1.0, mid), xycoords=("axes fraction", "data"),
+                    xytext=(6, 0), textcoords="offset points",
+                    color=color, fontsize=7.5, alpha=0.75, va="center",
+                )
+            lower = band_top
 
     # Series lines
     for key in series_keys:

@@ -64,7 +64,7 @@ The window covers 63 trading days — approximately one quarter. The prior windo
 
 ## The Current Snapshot
 
-![Correlation Matrix — June 17, 2026](.tmp/correlation_matrix_20260617.png)
+![Correlation Matrix — June 17, 2026](../.tmp/correlation_matrix_20260617.png)
 
 ### Panel 1: What the Current Structure Looks Like
 
@@ -102,8 +102,6 @@ The current 63-day correlation structure reflects a broadly coordinated risk env
 
 ---
 
-<a href="https://www.buymeacoffee.com/DeltanTheta" target="_blank">
-<img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
-     alt="Buy Me A Coffee"
-     style="height: 60px !important; width: 217px !important;" />
-</a>
+[☕ Buy me a coffee/tokens](https://www.buymeacoffee.com/DeltanTheta)
+
+— *DeltaTheta*
