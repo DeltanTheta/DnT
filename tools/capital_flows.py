@@ -38,21 +38,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import yfinance as yf
+from curl_cffi import requests as curl_requests
+from dotenv import load_dotenv
 
-YF_SESSION = None
+load_dotenv(Path(__file__).parent.parent / ".env")
 
-
-def _init_yf_session():
-    """Initialize yfinance session with curl_cffi."""
-    global YF_SESSION
-    if YF_SESSION is None:
-        import yfinance as yf
-        from curl_cffi import requests as curl_requests
-        from dotenv import load_dotenv
-
-        load_dotenv(Path(__file__).parent.parent / ".env")
-        YF_SESSION = curl_requests.Session(impersonate="chrome", verify=False)
-    return YF_SESSION
+YF_SESSION = curl_requests.Session(impersonate="chrome", verify=False)
 
 TICKERS: dict[str, str] = {
     "XLB":  "Materials",
@@ -74,14 +66,12 @@ WINDOWS: tuple[int, int, int] = (5, 15, 30)
 
 
 def fetch(tickers: list[str], start: str, end: str | None) -> dict[str, pd.DataFrame]:
-    import yfinance as yf
-    session = _init_yf_session()
     result: dict[str, pd.DataFrame] = {}
     for ticker in tickers:
         try:
             df = yf.download(
                 ticker, start=start, end=end,
-                auto_adjust=True, progress=False, session=session,
+                auto_adjust=True, progress=False, session=YF_SESSION,
             )
             if df is None or df.empty:
                 print(f"  WARN: No data for {ticker}", file=sys.stderr)
