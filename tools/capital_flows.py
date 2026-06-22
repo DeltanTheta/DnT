@@ -320,3 +320,73 @@ def render_heatmap(snap: pd.DataFrame, as_of: str, out_path: str) -> None:
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"Chart saved → {out_path}")
+
+
+def save(wide: pd.DataFrame, path: str) -> None:
+    """Saves flattened wide CMF time series to CSV. Columns: XLF_cmf5, XLF_cmf15, ..."""
+    flat = wide.copy()
+    flat.columns = [f"{ticker}_cmf{window}" for ticker, window in flat.columns]
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    flat.to_csv(path)
+    print(f"\nSaved {flat.shape[0]} rows × {flat.shape[1]} cols → {path}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Capital Flows — multi-timeframe CMF for SPX sectors + TLT + GLD"
+    )
+    parser.add_argument("--report", action="store_true",
+                        help="Print ranked watchlist (default if no output flag given)")
+    parser.add_argument("--table",  action="store_true",
+                        help="Print positioning table (OVER/NEUT/UNDER grid)")
+    parser.add_argument("--chart",  action="store_true",
+                        help="Generate heatmap chart PNG")
+    parser.add_argument("--all",    action="store_true",
+                        help="All three outputs: watchlist + table + chart")
+    parser.add_argument("--start",  default="2023-01-01",
+                        help="Start date YYYY-MM-DD (default: 2023-01-01)")
+    parser.add_argument("--end",    default=None,
+                        help="End date YYYY-MM-DD (default: today)")
+    parser.add_argument("--out",    default=None,
+                        help="CSV output path (default: .tmp/capital_flows_<date>.csv)")
+    parser.add_argument("--chart-out", default=None,
+                        help="Chart PNG path (default: .tmp/capital_flows_chart_<date>.png)")
+    args = parser.parse_args()
+
+    # Default to --report if no output flag given
+    show_report = args.report or args.all or not (args.table or args.chart)
+    show_table  = args.table  or args.all
+    show_chart  = args.chart  or args.all
+
+    print(f"\nFetching OHLCV for {len(TICKERS)} tickers...")
+    raw = fetch(list(TICKERS.keys()), start=args.start, end=args.end)
+    if not raw:
+        sys.exit("No data fetched.")
+
+    print(f"\nComputing {WINDOWS}-day CMF...")
+    wide = build_signal_stack(raw, windows=WINDOWS)
+
+    today_str = datetime.today().strftime("%Y%m%d")
+    out_path = args.out or str(
+        Path(__file__).parent.parent / ".tmp" / f"capital_flows_{today_str}.csv"
+    )
+    save(wide, out_path)
+
+    as_of = str(wide.dropna(how="all").index[-1].date())
+    snap = derive_snapshot(wide, raw, TICKERS, windows=WINDOWS)
+
+    if show_report:
+        print_watchlist(snap, as_of=as_of)
+
+    if show_table:
+        print_table(snap, as_of=as_of)
+
+    if show_chart:
+        chart_path = args.chart_out or str(
+            Path(__file__).parent.parent / ".tmp" / f"capital_flows_chart_{today_str}.png"
+        )
+        render_heatmap(snap, as_of=as_of, out_path=chart_path)
+
+
+if __name__ == "__main__":
+    main()
