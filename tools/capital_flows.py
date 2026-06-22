@@ -26,23 +26,26 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+os.environ["CURL_CA_BUNDLE"] = ""
+os.environ["REQUESTS_CA_BUNDLE"] = ""
+ssl._create_default_https_context = ssl._create_unverified_context
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-# These are initialized lazily when needed (by fetch function or main)
 YF_SESSION = None
 
+
 def _init_yf_session():
-    """Initialize yfinance session with curl_cffi. Called only when needed."""
+    """Initialize yfinance session with curl_cffi."""
     global YF_SESSION
     if YF_SESSION is None:
-        os.environ["CURL_CA_BUNDLE"] = ""
-        os.environ["REQUESTS_CA_BUNDLE"] = ""
-        ssl._create_default_https_context = ssl._create_unverified_context
-
-        if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(encoding="utf-8")
-
         import yfinance as yf
         from curl_cffi import requests as curl_requests
         from dotenv import load_dotenv
