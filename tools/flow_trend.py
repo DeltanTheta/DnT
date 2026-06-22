@@ -18,8 +18,8 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import matplotlib.pyplot as plt   # used by render_trend_chart (Task 2)
+import matplotlib.dates as mdates  # used by render_trend_chart (Task 2)
 import pandas as pd
 
 GROUPS: dict[str, list[str]] = {
