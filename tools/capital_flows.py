@@ -229,3 +229,24 @@ def derive_snapshot(
         })
     snap = pd.DataFrame(rows)
     return snap.sort_values("cmf15", ascending=False).reset_index(drop=True)
+
+
+def print_watchlist(snap: pd.DataFrame, as_of: str) -> None:
+    """Prints ranked watchlist — primary output, anchor format."""
+    print(f"\nCapital Flow Watchlist  —  {as_of}")
+    print("Horizon: 2W / 30D / 90D\n")
+    header = f"  {'Sector':<24}  {'5D':>7}  {'15D':>7}  {'30D':>7}  {'Align':>5}  Position"
+    print(header)
+    print("  " + "─" * 78)
+    for _, row in snap.iterrows():
+        div = f"  {row['div_flag']}" if row["div_flag"] else ""
+        line = (
+            f"  {row['label']:<24}"
+            f"  {row['cmf5']:>+7.4f}"
+            f"  {row['cmf15']:>+7.4f}"
+            f"  {row['cmf30']:>+7.4f}"
+            f"  {row['align_arrows']:>5}"
+            f"  {row['position_call']}{div}"
+        )
+        print(line)
+    print()
