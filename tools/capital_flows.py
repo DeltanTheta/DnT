@@ -196,7 +196,10 @@ def derive_snapshot(
     Builds a one-row-per-ticker snapshot from the latest date in `wide`.
     Sorted by 15-day CMF descending (strongest inflow first).
     """
-    last = wide.dropna(how="all").iloc[-1]
+    filtered = wide.dropna(how="all")
+    if filtered.empty:
+        return pd.DataFrame()
+    last = filtered.iloc[-1]
     w5, w15, w30 = windows
     rows = []
     for ticker, label in tickers.items():
@@ -231,6 +234,10 @@ def derive_snapshot(
     return snap.sort_values("cmf15", ascending=False).reset_index(drop=True)
 
 
+def _fmt_cmf(v) -> str:
+    return f"{v:>+7.4f}" if not pd.isna(v) else "    ---"
+
+
 def print_watchlist(snap: pd.DataFrame, as_of: str) -> None:
     """Prints ranked watchlist — primary output, anchor format."""
     print(f"\nCapital Flow Watchlist  —  {as_of}")
@@ -242,9 +249,9 @@ def print_watchlist(snap: pd.DataFrame, as_of: str) -> None:
         div = f"  {row['div_flag']}" if row["div_flag"] else ""
         line = (
             f"  {row['label']:<24}"
-            f"  {row['cmf5']:>+7.4f}"
-            f"  {row['cmf15']:>+7.4f}"
-            f"  {row['cmf30']:>+7.4f}"
+            f"  {_fmt_cmf(row['cmf5'])}"
+            f"  {_fmt_cmf(row['cmf15'])}"
+            f"  {_fmt_cmf(row['cmf30'])}"
             f"  {row['align_arrows']:>5}"
             f"  {row['position_call']}{div}"
         )
@@ -266,11 +273,6 @@ def print_table(snap: pd.DataFrame, as_of: str) -> None:
             f"  {row['pos30']:>6}"
         )
     print()
-
-
-COLOR_POS  = "#2563EB"   # blue  — inflow
-COLOR_NEG  = "#DC2626"   # red   — outflow
-COLOR_ZERO = "#6B7280"   # gray  — near zero
 
 
 def render_heatmap(snap: pd.DataFrame, as_of: str, out_path: str) -> None:
@@ -315,7 +317,6 @@ def render_heatmap(snap: pd.DataFrame, as_of: str, out_path: str) -> None:
     note = "ETF proxies only — indicative of broader flows, not precise sector accounting."
     fig.text(0.5, -0.01, note, ha="center", fontsize=7.5, color="#9CA3AF", style="italic")
 
-    plt.tight_layout()
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -324,8 +325,7 @@ def render_heatmap(snap: pd.DataFrame, as_of: str, out_path: str) -> None:
 
 def save(wide: pd.DataFrame, path: str) -> None:
     """Saves flattened wide CMF time series to CSV. Columns: XLF_cmf5, XLF_cmf15, ..."""
-    flat = wide.copy()
-    flat.columns = [f"{ticker}_cmf{window}" for ticker, window in flat.columns]
+    flat = wide.rename(columns=lambda c: f"{c[0]}_cmf{c[1]}")
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     flat.to_csv(path)
     print(f"\nSaved {flat.shape[0]} rows × {flat.shape[1]} cols → {path}")
@@ -372,7 +372,11 @@ def main() -> None:
     )
     save(wide, out_path)
 
-    as_of = str(wide.dropna(how="all").index[-1].date())
+    filtered = wide.dropna(how="all")
+    if filtered.empty:
+        sys.exit(f"Insufficient data — no complete CMF window in range. "
+                 f"Try --start with an earlier date (need at least {max(WINDOWS)} trading days).")
+    as_of = str(filtered.index[-1].date())
     snap = derive_snapshot(wide, raw, TICKERS, windows=WINDOWS)
 
     if show_report:

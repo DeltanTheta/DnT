@@ -182,7 +182,7 @@ def test_derive_snapshot_columns_and_sort():
     }
     tickers = {"XLF": "Financials", "XLE": "Energy"}
     wide = build_signal_stack(raw, windows=(5, 15, 30))
-    snap = derive_snapshot(wide, raw, tickers)
+    snap = derive_snapshot(wide, raw, tickers, windows=(5, 15, 30))
 
     expected_cols = {
         "ticker", "label", "cmf5", "cmf15", "cmf30",
