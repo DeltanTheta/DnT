@@ -111,3 +111,76 @@ def build_signal_stack(
     wide.columns = pd.MultiIndex.from_tuples(wide.columns, names=["ticker", "window"])
     wide.index.name = "date"
     return wide
+
+
+def derive_positioning(cmf: float, threshold: float = 0.05) -> str:
+    """OVER / NEUT / UNDER based on CMF value vs threshold."""
+    if pd.isna(cmf):
+        return "NEUT"
+    if cmf > threshold:
+        return "OVER"
+    if cmf < -threshold:
+        return "UNDER"
+    return "NEUT"
+
+
+def derive_alignment(pos5: str, pos15: str, pos30: str) -> tuple[int, str]:
+    """
+    Returns (alignment_count, arrow_string).
+    alignment_count = max(over_count, under_count) — how many windows agree.
+    """
+    positions = [pos5, pos15, pos30]
+    arrow_map = {"OVER": "▲", "UNDER": "▼", "NEUT": "→"}
+    arrows = "".join(arrow_map[p] for p in positions)
+    over_count = positions.count("OVER")
+    under_count = positions.count("UNDER")
+    return max(over_count, under_count), arrows
+
+
+def compute_price_return(ohlcv: pd.DataFrame, n_days: int) -> float:
+    """n-day price return from Close series. Returns nan if insufficient data."""
+    closes = ohlcv["Close"].dropna()
+    if len(closes) < n_days + 1:
+        return float("nan")
+    return float(closes.iloc[-1] / closes.iloc[-(n_days + 1)] - 1)
+
+
+def derive_divergence(
+    cmf15: float,
+    price_return: float,
+    cmf_threshold: float = 0.05,
+    return_threshold: float = 0.01,
+) -> str:
+    """
+    [DIV↓] = price rising, flow weakening (distribution signal)
+    [DIV↑] = price falling, flow holding (accumulation signal)
+    ""  = no divergence
+    """
+    if pd.isna(cmf15) or pd.isna(price_return):
+        return ""
+    if cmf15 < -cmf_threshold and price_return > return_threshold:
+        return "[DIV↓]"
+    if cmf15 > cmf_threshold and price_return < -return_threshold:
+        return "[DIV↑]"
+    return ""
+
+
+def make_position_call(pos5: str, pos15: str, pos30: str) -> str:
+    """Translate three positioning calls into a single actionable horizon string."""
+    positions = [pos5, pos15, pos30]
+    horizons = ["2W", "30D", "90D"]
+
+    over_idx  = [i for i, p in enumerate(positions) if p == "OVER"]
+    under_idx = [i for i, p in enumerate(positions) if p == "UNDER"]
+
+    if len(over_idx) == 3:
+        return "OVERWEIGHT  2W–90D"
+    if len(under_idx) == 3:
+        return "UNDERWEIGHT  2W–90D"
+
+    # Two consecutive windows in the same direction
+    for idx, label in [(over_idx, "OVERWEIGHT"), (under_idx, "UNDERWEIGHT")]:
+        if len(idx) == 2 and idx[1] - idx[0] == 1:
+            return f"{label}  {horizons[idx[0]]}–{horizons[idx[1]]}"
+
+    return "HOLD / WATCH"
