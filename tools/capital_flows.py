@@ -250,3 +250,73 @@ def print_watchlist(snap: pd.DataFrame, as_of: str) -> None:
         )
         print(line)
     print()
+
+
+def print_table(snap: pd.DataFrame, as_of: str) -> None:
+    """Prints sector × timeframe positioning grid (OVER/NEUT/UNDER)."""
+    print(f"\nPositioning Table  —  {as_of}\n")
+    header = f"  {'Sector':<24}  {'2W':>6}  {'30D':>6}  {'90D':>6}"
+    print(header)
+    print("  " + "─" * 48)
+    for _, row in snap.iterrows():
+        print(
+            f"  {row['label']:<24}"
+            f"  {row['pos5']:>6}"
+            f"  {row['pos15']:>6}"
+            f"  {row['pos30']:>6}"
+        )
+    print()
+
+
+COLOR_POS  = "#2563EB"   # blue  — inflow
+COLOR_NEG  = "#DC2626"   # red   — outflow
+COLOR_ZERO = "#6B7280"   # gray  — near zero
+
+
+def render_heatmap(snap: pd.DataFrame, as_of: str, out_path: str) -> None:
+    """
+    Heatmap: rows = sectors (sorted by 15D CMF), columns = 5D/15D/30D windows.
+    Blue = inflow, red = outflow, intensity = magnitude. Divergence cells marked.
+    """
+    labels = snap["label"].tolist()
+    data = snap[["cmf5", "cmf15", "cmf30"]].values.astype(float)
+    vmax = 0.30  # clip colorscale; typical CMF range is well within ±0.3
+
+    fig, ax = plt.subplots(figsize=(7, max(5, len(labels) * 0.55 + 1.5)))
+    fig.patch.set_facecolor("#F9FAFB")
+    ax.set_facecolor("#F9FAFB")
+
+    im = ax.imshow(data, cmap="RdBu", vmin=-vmax, vmax=vmax, aspect="auto")
+
+    ax.set_xticks([0, 1, 2])
+    ax.set_xticklabels(["5D (2W)", "15D (30D)", "30D (90D)"], fontsize=10, color="#374151")
+    ax.set_yticks(range(len(labels)))
+    ax.set_yticklabels(labels, fontsize=9, color="#374151")
+
+    for i in range(len(labels)):
+        for j in range(3):
+            val = data[i, j]
+            if np.isnan(val):
+                continue
+            text_color = "white" if abs(val) > 0.15 else "#111827"
+            ax.text(j, i, f"{val:+.3f}", ha="center", va="center",
+                    fontsize=8, color=text_color)
+        # Mark divergence on the 15D column (index 1)
+        if snap.iloc[i]["div_flag"]:
+            ax.text(1.42, i - 0.38, "D", fontsize=6.5, color="#F59E0B",
+                    fontweight="bold")
+
+    ax.set_title(
+        f"Capital Flow Heatmap  |  5 / 15 / 30-Day CMF  |  As of {as_of}",
+        fontsize=12, fontweight="bold", color="#111827", pad=12,
+    )
+    plt.colorbar(im, ax=ax, label="CMF", shrink=0.6, pad=0.02)
+
+    note = "ETF proxies only — indicative of broader flows, not precise sector accounting."
+    fig.text(0.5, -0.01, note, ha="center", fontsize=7.5, color="#9CA3AF", style="italic")
+
+    plt.tight_layout()
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Chart saved → {out_path}")

@@ -211,3 +211,39 @@ def test_print_watchlist_contains_key_fields(capsys):
     assert "Energy" in captured
     assert "OVERWEIGHT" in captured or "UNDERWEIGHT" in captured or "HOLD" in captured
     assert "▲" in captured or "▼" in captured or "→" in captured
+
+
+def test_print_table_contains_over_under_neut(capsys):
+    from tools.capital_flows import build_signal_stack, derive_snapshot, print_table
+    raw = {
+        "XLF": make_mock_ohlcv(60, close_position=0.9),
+        "XLE": make_mock_ohlcv(60, close_position=0.1),
+    }
+    tickers = {"XLF": "Financials", "XLE": "Energy"}
+    wide = build_signal_stack(raw, windows=(5, 15, 30))
+    snap = derive_snapshot(wide, raw, tickers)
+    print_table(snap, as_of="2026-06-22")
+    captured = capsys.readouterr().out
+    assert "2W" in captured
+    assert "30D" in captured
+    assert "90D" in captured
+    assert any(label in captured for label in ("OVER", "NEUT", "UNDER"))
+
+
+def test_render_heatmap_creates_file():
+    import tempfile
+    import matplotlib
+    matplotlib.use("Agg")
+    from tools.capital_flows import build_signal_stack, derive_snapshot, render_heatmap
+    raw = {
+        "XLF": make_mock_ohlcv(60, close_position=0.9),
+        "XLE": make_mock_ohlcv(60, close_position=0.1),
+    }
+    tickers = {"XLF": "Financials", "XLE": "Energy"}
+    wide = build_signal_stack(raw, windows=(5, 15, 30))
+    snap = derive_snapshot(wide, raw, tickers)
+    with tempfile.TemporaryDirectory() as d:
+        from pathlib import Path
+        out = Path(d) / "heatmap.png"
+        render_heatmap(snap, as_of="2026-06-22", out_path=str(out))
+        assert out.exists() and out.stat().st_size > 0
