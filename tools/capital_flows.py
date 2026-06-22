@@ -325,7 +325,7 @@ def render_heatmap(snap: pd.DataFrame, as_of: str, out_path: str) -> None:
 
 def save(wide: pd.DataFrame, path: str) -> None:
     """Saves flattened wide CMF time series to CSV. Columns: XLF_cmf5, XLF_cmf15, ..."""
-    flat = wide.rename(columns=lambda c: f"{c[0]}_cmf{c[1]}")
+    flat = wide.set_axis([f"{t}_cmf{w}" for t, w in wide.columns], axis="columns")
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     flat.to_csv(path)
     print(f"\nSaved {flat.shape[0]} rows × {flat.shape[1]} cols → {path}")
