@@ -172,3 +172,24 @@ def test_position_call_split_over():
 def test_position_call_mixed():
     from tools.capital_flows import make_position_call
     assert make_position_call("OVER", "NEUT", "UNDER") == "HOLD / WATCH"
+
+
+def test_derive_snapshot_columns_and_sort():
+    from tools.capital_flows import build_signal_stack, derive_snapshot
+    raw = {
+        "XLF": make_mock_ohlcv(60, close_position=0.9),  # strong positive CMF
+        "XLE": make_mock_ohlcv(60, close_position=0.1),  # strong negative CMF
+    }
+    tickers = {"XLF": "Financials", "XLE": "Energy"}
+    wide = build_signal_stack(raw, windows=(5, 15, 30))
+    snap = derive_snapshot(wide, raw, tickers)
+
+    expected_cols = {
+        "ticker", "label", "cmf5", "cmf15", "cmf30",
+        "pos5", "pos15", "pos30", "align_count", "align_arrows",
+        "price_return_15d", "div_flag", "position_call",
+    }
+    assert expected_cols.issubset(set(snap.columns))
+    # XLF (positive flow) should rank above XLE (negative flow)
+    assert snap.iloc[0]["ticker"] == "XLF"
+    assert snap.iloc[1]["ticker"] == "XLE"

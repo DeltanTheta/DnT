@@ -184,3 +184,48 @@ def make_position_call(pos5: str, pos15: str, pos30: str) -> str:
             return f"{label}  {horizons[idx[0]]}–{horizons[idx[1]]}"
 
     return "HOLD / WATCH"
+
+
+def derive_snapshot(
+    wide: pd.DataFrame,
+    raw: dict[str, pd.DataFrame],
+    tickers: dict[str, str],
+    windows: tuple[int, int, int] = WINDOWS,
+) -> pd.DataFrame:
+    """
+    Builds a one-row-per-ticker snapshot from the latest date in `wide`.
+    Sorted by 15-day CMF descending (strongest inflow first).
+    """
+    last = wide.dropna(how="all").iloc[-1]
+    w5, w15, w30 = windows
+    rows = []
+    for ticker, label in tickers.items():
+        if ticker not in raw:
+            continue
+        cmf5  = float(last.get((ticker, w5),  float("nan")))
+        cmf15 = float(last.get((ticker, w15), float("nan")))
+        cmf30 = float(last.get((ticker, w30), float("nan")))
+        pos5  = derive_positioning(cmf5)
+        pos15 = derive_positioning(cmf15)
+        pos30 = derive_positioning(cmf30)
+        align_count, align_arrows = derive_alignment(pos5, pos15, pos30)
+        ret15 = compute_price_return(raw[ticker], w15)
+        div_flag = derive_divergence(cmf15, ret15)
+        position_call = make_position_call(pos5, pos15, pos30)
+        rows.append({
+            "ticker": ticker,
+            "label": label,
+            "cmf5":  round(cmf5,  4),
+            "cmf15": round(cmf15, 4),
+            "cmf30": round(cmf30, 4),
+            "pos5":  pos5,
+            "pos15": pos15,
+            "pos30": pos30,
+            "align_count":    align_count,
+            "align_arrows":   align_arrows,
+            "price_return_15d": round(ret15, 4) if not np.isnan(ret15) else float("nan"),
+            "div_flag":       div_flag,
+            "position_call":  position_call,
+        })
+    snap = pd.DataFrame(rows)
+    return snap.sort_values("cmf15", ascending=False).reset_index(drop=True)
